@@ -11,7 +11,7 @@ smtp_server = "smtp.gmail.com"
 smtp_port = 587
 email_username = "songindian16@gmail.com"
 email_password = os.getenv("EMAIL_PASSWORD", "gxzk hegw vbks pavr")  # App Password
-telegram_bot_token = "7512114938:AAGURK9wQFhr07zfE-vVl9N1tbHvs_KmfZk"
+telegram_bot_token = "7512114938:AAHJR3QbVGszmMkequ87p6N-E19tc-hqihQ"
 OWNER_ID = 7640331919  # Only the owner can approve users
 APPROVED_USERS = {OWNER_ID}  # Store approved users, initially only the owner
 
@@ -40,11 +40,10 @@ Sincerely,
 """
 
 # Conversation states
-CHAT_LINK, CUSTOM_MESSAGE = range(2)
+CHAT_LINK = range(1)
 
 # Global variables
 chat_link = None
-custom_message = None
 auto_report = False
 
 
@@ -58,9 +57,10 @@ def is_approved(update: Update):
 
 
 # Function to send email
-def send_email(message_body):
+def send_email(chat_link):
     try:
         recipient_email = "abuse@telegram.org"
+        message_body = default_report_message.format(chat_link)
 
         with smtplib.SMTP(smtp_server, smtp_port) as server:
             server.starttls()
@@ -89,40 +89,19 @@ async def start(update: Update, context):
 
 
 async def chat_link_handler(update: Update, context):
-    global chat_link
+    global chat_link, auto_report
     if not is_approved(update):
         await update.message.reply_text("❌ You are not authorized to use this bot.")
         return ConversationHandler.END
 
     chat_link = update.message.text
-    await update.message.reply_text(
-        f"Got the chat link: {chat_link}\nYou can now enter a custom message for the report or type 'default' to use the standard message."
-    )
-    return CUSTOM_MESSAGE
-
-
-async def custom_message_handler(update: Update, context):
-    global custom_message, auto_report
-    if not is_approved(update):
-        await update.message.reply_text("❌ You are not authorized to use this bot.")
-        return ConversationHandler.END
-
-    custom_message = update.message.text
-    if custom_message.lower() == 'default':
-        # Replace placeholder with chat link in the default message
-        message_body = default_report_message.format(chat_link)
-    else:
-        message_body = custom_message.strip()
-
-    result = send_email(message_body)
-    await update.message.reply_text(result)
+    await update.message.reply_text(f"Got the chat link: {chat_link}\nStarting auto-reporting every 2 minutes. Type /stop to cancel.")
 
     auto_report = True
-    await update.message.reply_text("Auto-reporting every 2 minutes. Type /stop to cancel.")
     while auto_report:
-        await asyncio.sleep(120)  # Wait for 2 minutes
-        result = send_email(message_body)
+        result = send_email(chat_link)
         await context.bot.send_message(chat_id=update.effective_chat.id, text=result)
+        await asyncio.sleep(120)  # Wait for 2 minutes
 
     return ConversationHandler.END
 
@@ -133,9 +112,11 @@ async def stop(update: Update, context):
         await update.message.reply_text("❌ You are not authorized to use this bot.")
         return ConversationHandler.END
 
-    auto_report = False
-    await update.message.reply_text("Auto-reporting stopped. You can start again by typing /start.")
-    return ConversationHandler.END
+    if auto_report:
+        auto_report = False
+        await update.message.reply_text("✅ Auto-reporting has been stopped.")
+    else:
+        await update.message.reply_text("ℹ️ Auto-reporting is not currently active.")
 
 
 async def approve(update: Update, context):
@@ -163,7 +144,6 @@ def main():
         entry_points=[CommandHandler('start', start)],
         states={
             CHAT_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, chat_link_handler)],
-            CUSTOM_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, custom_message_handler)],
         },
         fallbacks=[CommandHandler('stop', stop)],
     )
@@ -177,4 +157,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-      
