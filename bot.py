@@ -11,7 +11,7 @@ smtp_server = "smtp.gmail.com"
 smtp_port = 587
 email_username = "songindian16@gmail.com"
 email_password = os.getenv("EMAIL_PASSWORD", "gxzk hegw vbks pavr")  # App Password
-telegram_bot_token = "7512114938:AAFqu3T1s5thxOpN2ByoRXTqDYq9NcpwG6E"
+telegram_bot_token = "7512114938:AAEvmPz-z5WXHBGAVUooGIYUr1ZW0m-pufQ"
 OWNER_ID = 7640331919  # Only the owner can approve users
 APPROVED_USERS = {OWNER_ID}  # Store approved users, initially only the owner
 
@@ -43,8 +43,7 @@ Sincerely,
 CHAT_LINK = range(1)
 
 # Global variables
-chat_link = None
-auto_report = False
+user_tasks = {}  # Dictionary to track tasks per user
 
 
 # Permission check
@@ -84,12 +83,12 @@ async def start(update: Update, context):
         await update.message.reply_text("❌ You are not authorized to use this bot.")
         return ConversationHandler.END
 
-    await update.message.reply_text("Welcome! Please send the chat/group/channel link you want to report.")
+    await update.message.reply_text("Welcome! Please send the chat/group/channel link you want to report or type /cancel to exit.")
     return CHAT_LINK
 
 
 async def chat_link_handler(update: Update, context):
-    global chat_link, auto_report
+    user_id = update.effective_user.id
     if not is_approved(update):
         await update.message.reply_text("❌ You are not authorized to use this bot.")
         return ConversationHandler.END
@@ -97,26 +96,47 @@ async def chat_link_handler(update: Update, context):
     chat_link = update.message.text
     await update.message.reply_text(f"Got the chat link: {chat_link}\nStarting auto-reporting every 2 minutes. Type /stop to cancel.")
 
-    auto_report = True
-    while auto_report:
-        result = send_email(chat_link)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=result)
-        await asyncio.sleep(120)  # Wait for 2 minutes
+    # Cancel existing task if any
+    if user_id in user_tasks:
+        user_tasks[user_id].cancel()
 
+    # Start a new task
+    user_tasks[user_id] = asyncio.create_task(report_task(chat_link, context, update))
     return ConversationHandler.END
 
 
+async def report_task(chat_link, context, update):
+    user_id = update.effective_user.id
+    try:
+        while True:
+            result = send_email(chat_link)
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=result)
+            await asyncio.sleep(120)  # Wait for 2 minutes
+    except asyncio.CancelledError:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="ℹ️ Reporting task has been stopped.")
+
+
 async def stop(update: Update, context):
-    global auto_report
+    user_id = update.effective_user.id
     if not is_approved(update):
         await update.message.reply_text("❌ You are not authorized to use this bot.")
         return ConversationHandler.END
 
-    if auto_report:
-        auto_report = False
+    if user_id in user_tasks and not user_tasks[user_id].cancelled():
+        user_tasks[user_id].cancel()
+        del user_tasks[user_id]
         await update.message.reply_text("✅ Auto-reporting has been stopped.")
     else:
-        await update.message.reply_text("ℹ️ Auto-reporting is not currently active.")
+        await update.message.reply_text("ℹ️ No active reporting task to stop.")
+
+
+async def cancel(update: Update, context):
+    user_id = update.effective_user.id
+    if user_id in user_tasks:
+        user_tasks[user_id].cancel()
+        del user_tasks[user_id]
+    await update.message.reply_text("❌ Operation has been canceled. You can start again with /start.")
+    return ConversationHandler.END
 
 
 async def approve(update: Update, context):
@@ -143,9 +163,12 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            CHAT_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, chat_link_handler)],
+            CHAT_LINK: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, chat_link_handler),
+                CommandHandler('cancel', cancel)
+            ],
         },
-        fallbacks=[CommandHandler('stop', stop)],
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
 
     application.add_handler(conv_handler)
