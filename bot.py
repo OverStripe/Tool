@@ -60,7 +60,7 @@ def is_approved(update: Update):
 # Function to send email
 def send_email(message_body):
     try:
-        recipient_email = "abuse@telegram.com"
+        recipient_email = "abuse@telegram.org"
 
         with smtplib.SMTP(smtp_server, smtp_port) as server:
             server.starttls()
