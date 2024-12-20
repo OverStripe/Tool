@@ -11,7 +11,7 @@ smtp_server = "smtp.gmail.com"
 smtp_port = 587
 email_username = "songindian16@gmail.com"
 email_password = os.getenv("EMAIL_PASSWORD", "gxzk hegw vbks pavr")  # App Password
-telegram_bot_token = "7512114938:AAEvmPz-z5WXHBGAVUooGIYUr1ZW0m-pufQ"
+telegram_bot_token = "7901325960:AAFNQ-duypr7BR4j2trtcffrI22ddnJgU08"
 OWNER_ID = 7640331919  # Only the owner can approve users
 APPROVED_USERS = {OWNER_ID}  # Store approved users, initially only the owner
 
